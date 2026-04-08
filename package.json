@@ -1,7 +1,7 @@
 {
   "name": "serialplot-extension",
   "displayName": "SerialPlot Extension",
-  "publisher": "chatchai.buekban",
+  "publisher": "chatchaibuekban",
   "icon": "resources/icon.png",
   "description": "A VS Code extension for Serial Plotting",
   "version": "0.0.1",
