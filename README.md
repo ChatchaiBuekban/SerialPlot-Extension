@@ -9,9 +9,9 @@ A powerful, real-time Serial Plotter for VS Code. Visualize your serial data wit
 - **Real-time Plotting**: High-performance visualization of serial data stream.
 - **Axis Values & Labels**: Automatic and manual Y-axis scaling with clear numeric labels.
 - **Advanced Filtering**:
-    - **Smooth (SMA)**: Simple Moving Average filter to reduce noise.
-    - **Low Pass**: First-order IIR filter for high-frequency noise suppression.
-    - **High Pass**: First-order IIR filter to focus on rapid changes in data.
+  - **Smooth (SMA)**: Simple Moving Average filter to reduce noise.
+  - **Low Pass**: First-order IIR filter for high-frequency noise suppression.
+  - **High Pass**: First-order IIR filter to focus on rapid changes in data.
 - **Customizable Grid**: Toggle and color-customize the plot grid.
 - **Data Capture**: Save high-quality PNG snapshots of your current plot.
 - **Flexible Configuration**: Adjust baud rates, sampling points, and filter parameters on the fly.
@@ -19,7 +19,7 @@ A powerful, real-time Serial Plotter for VS Code. Visualize your serial data wit
 ## How to Use
 
 1. **Connect your Device**: Ensure your serial device (Arduino, ESP32, etc.) is connected to your computer.
-2. **Launch the Plotter**: 
+2. **Launch the Plotter**:
    - Press `F1` or `Ctrl+Shift+P` to open the Command Palette.
    - Type `Open Serial Plotter` and press Enter.
 3. **Select Connection**:
@@ -30,6 +30,10 @@ A powerful, real-time Serial Plotter for VS Code. Visualize your serial data wit
    - Adjust the **Param** value to fine-tune the filter's intensity.
    - Toggle **Auto Y-Axis** to switch between automatic scaling and fixed ranges.
    - Click **Capture** to save the current view as an image.
+
+## Screen shot
+
+![SerialPlot Screen shot](resources/screenshot.png)
 
 ## Requirements
 
