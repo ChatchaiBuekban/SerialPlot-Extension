@@ -1,71 +1,59 @@
-# serialplot-extension README
+# SerialPlot Extension
 
-This is the README for your extension "serialplot-extension". After writing up a brief description, we recommend including the following sections.
+A powerful, real-time Serial Plotter for VS Code. Visualize your serial data with ease, apply digital filters, and capture plots for your documentation.
+
+![SerialPlot Icon](resources/icon.png)
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+- **Real-time Plotting**: High-performance visualization of serial data stream.
+- **Axis Values & Labels**: Automatic and manual Y-axis scaling with clear numeric labels.
+- **Advanced Filtering**:
+    - **Smooth (SMA)**: Simple Moving Average filter to reduce noise.
+    - **Low Pass**: First-order IIR filter for high-frequency noise suppression.
+    - **High Pass**: First-order IIR filter to focus on rapid changes in data.
+- **Customizable Grid**: Toggle and color-customize the plot grid.
+- **Data Capture**: Save high-quality PNG snapshots of your current plot.
+- **Flexible Configuration**: Adjust baud rates, sampling points, and filter parameters on the fly.
 
-For example if there is an image subfolder under your extension project workspace:
+## How to Use
 
-\!\[feature X\]\(images/feature-x.png\)
-
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+1. **Connect your Device**: Ensure your serial device (Arduino, ESP32, etc.) is connected to your computer.
+2. **Launch the Plotter**: 
+   - Press `F1` or `Ctrl+Shift+P` to open the Command Palette.
+   - Type `Open Serial Plotter` and press Enter.
+3. **Select Connection**:
+   - Choose the serial port your device is connected to.
+   - Select the desired baud rate (default is 9600).
+4. **Interact with the Plot**:
+   - Use the **Filter** dropdown to apply real-time smoothing.
+   - Adjust the **Param** value to fine-tune the filter's intensity.
+   - Toggle **Auto Y-Axis** to switch between automatic scaling and fixed ranges.
+   - Click **Capture** to save the current view as an image.
 
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+- **Serial Port Access**: Ensure you have the necessary permissions to access serial ports on your operating system.
+- **Data Format**: The extension expects numeric data sent over serial, ending with a newline character (`\n`).
 
 ## Extension Settings
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+This extension currently uses a direct command interface. Configuration for each plot is handled within the plotter's webview.
 
 ## Known Issues
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+- Plot performance may vary with extremely high data rates (e.g., >1kHz).
+- Only the first numeric value in a serial line is currently plotted.
 
 ## Release Notes
 
-Users appreciate release notes as you update your extension.
+### 0.0.1
 
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
+- Initial release.
+- Added real-time plotting with Y-axis values.
+- Implemented Smooth, Low Pass, and High Pass filtering.
+- Added plot capture functionality.
 
 ---
 
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+**Developed with ❤️ by Chatchai Buekban**
