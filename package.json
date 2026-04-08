@@ -1,0 +1,55 @@
+{
+  "name": "serialplot-extension",
+  "displayName": "SerialPlot Extension",
+  "publisher": "chatchai.buekban",
+  "icon": "resources/icon.png",
+  "description": "A VS Code extension for Serial Plotting",
+  "version": "0.0.1",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chatchai-buekban/serialplot-extension.git"
+  },
+  "engines": {
+    "vscode": "^1.110.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:serialplot-extension.startPlot"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "serialplot-extension.startPlot",
+        "title": "Open Serial Plotter"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/asciichart": "^1.5.8",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "@types/vscode": "^1.110.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "eslint": "^9.39.3",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.1"
+  },
+  "dependencies": {
+    "@serialport/parser-readline": "^13.0.0",
+    "asciichart": "^1.5.25",
+    "serialport": "^13.0.0"
+  }
+}
