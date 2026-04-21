@@ -64,6 +64,19 @@ export function activate(context: vscode.ExtensionContext) {
                             await vscode.workspace.fs.writeFile(uri, buffer);
                             vscode.window.showInformationMessage('Plot captured and saved successfully!');
                         }
+                    } else if (message.command === 'saveLog') {
+                        const data = message.data;
+                        const buffer = Buffer.from(data, 'utf-8');
+                        
+                        const uri = await vscode.window.showSaveDialog({
+                            defaultUri: vscode.Uri.file(`serial-log-${Date.now()}.csv`),
+                            filters: { 'CSV Files': ['csv'], 'Text Files': ['txt'] }
+                        });
+
+                        if (uri) {
+                            await vscode.workspace.fs.writeFile(uri, buffer);
+                            vscode.window.showInformationMessage('Log saved successfully!');
+                        }
                     } else if (message.command === 'showError') {
                         vscode.window.showErrorMessage(message.message);
                     }
@@ -79,16 +92,26 @@ export function activate(context: vscode.ExtensionContext) {
 
             parser.on('data', (line: string) => {
                 const trimmed = line.trim();
-                if (!trimmed) return;
+                if (!trimmed) {
+                    return;
+                }
 
-                // Handle lines that might contain multiple values or labels
-                // For now, we take the first numeric value found
-                const match = trimmed.match(/[-+]?[0-9]*\.?[0-9]+/);
-                if (match) {
-                    const value = parseFloat(match[0]);
-                    if (!isNaN(value)) {
-                        panel?.webview.postMessage({ type: 'data', value });
+                // Split by common delimiters: comma, semicolon, space, tab
+                const parts = trimmed.split(/[,;\s\t]+/);
+                const values: number[] = [];
+                
+                for (const part of parts) {
+                    const match = part.match(/[-+]?[0-9]*\.?[0-9]+/);
+                    if (match) {
+                        const val = parseFloat(match[0]);
+                        if (!isNaN(val)) {
+                            values.push(val);
+                        }
                     }
+                }
+
+                if (values.length > 0) {
+                    panel?.webview.postMessage({ type: 'data', values });
                 }
             });
 
@@ -125,9 +148,9 @@ function getWebviewContent() {
     <title>Serial Plotter</title>
     <style>
         body { 
-            background-color: #1e1e1e; 
-            color: #ffffff; 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--vscode-editor-background); 
+            color: var(--vscode-editor-foreground); 
+            font-family: var(--vscode-font-family);
             margin: 0;
             padding: 10px;
             overflow: hidden;
@@ -140,16 +163,17 @@ function getWebviewContent() {
             justify-content: space-between;
             align-items: center;
             padding: 5px 10px;
-            background: #252526;
+            background: var(--vscode-sideBar-background);
             border-radius: 4px;
             margin-bottom: 10px;
+            border: 1px solid var(--vscode-panel-border);
         }
         .controls {
             display: flex;
             gap: 15px;
             align-items: center;
             font-size: 12px;
-            color: #ccc;
+            color: var(--vscode-descriptionForeground);
             flex-wrap: wrap;
         }
         .control-group {
@@ -158,9 +182,9 @@ function getWebviewContent() {
             gap: 5px;
         }
         input[type="number"], select {
-            background: #3c3c3c;
-            color: white;
-            border: 1px solid #555;
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
             padding: 2px 5px;
             border-radius: 3px;
         }
@@ -172,13 +196,37 @@ function getWebviewContent() {
         canvas { 
             flex-grow: 1;
             background: #000000;
-            border: 1px solid #444;
+            border: 1px solid var(--vscode-panel-border);
             border-radius: 4px;
         }
+        .value-container {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
         .value-display {
-            font-size: 20px;
+            font-size: 16px;
             font-weight: bold;
-            color: #00ff00;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: var(--vscode-badge-background);
+            color: var(--vscode-badge-foreground);
+        }
+        button {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            padding: 4px 10px;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        button:hover {
+            background: var(--vscode-button-hoverBackground);
+        }
+        button#pauseBtn.paused {
+            background: var(--vscode-debugIcon-startForeground);
         }
     </style>
 </head>
@@ -212,17 +260,23 @@ function getWebviewContent() {
                 <input type="color" id="gridColor" value="#222222">
             </div>
             <div class="control-group">
-                <button id="captureBtn" style="background: #0e639c; color: white; border: none; padding: 2px 8px; border-radius: 2px; cursor: pointer; font-size: 11px;">Capture</button>
+                <span>Split:</span>
+                <input type="checkbox" id="splitView">
+            </div>
+            <div class="control-group">
+                <button id="pauseBtn">Pause</button>
+                <button id="logBtn">Start Log</button>
+                <button id="captureBtn">Capture</button>
             </div>
         </div>
-        <div id="currentValue" class="value-display">0.00</div>
+        <div id="valueContainer" class="value-container"></div>
     </div>
     <canvas id="plotCanvas"></canvas>
     <script>
         const vscode = acquireVsCodeApi();
         const canvas = document.getElementById('plotCanvas');
         const ctx = canvas.getContext('2d');
-        const valueDisplay = document.getElementById('currentValue');
+        const valueContainer = document.getElementById('valueContainer');
         
         const autoYCheck = document.getElementById('autoY');
         const minYInput = document.getElementById('minY');
@@ -231,14 +285,21 @@ function getWebviewContent() {
         const pointsXInput = document.getElementById('pointsX');
         const showGridCheck = document.getElementById('showGrid');
         const gridColorInput = document.getElementById('gridColor');
+        const splitViewCheck = document.getElementById('splitView');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const logBtn = document.getElementById('logBtn');
         const captureBtn = document.getElementById('captureBtn');
         const filterTypeSelect = document.getElementById('filterType');
         const filterParamInput = document.getElementById('filterParam');
 
-        let data = [];
-        let rawDataBuffer = []; 
-        let lastFilteredValue = 0;
-        let lastRawValue = 0;
+        const COLORS = ['#00ff00', '#ff3333', '#33aaff', '#ffff00', '#ff00ff', '#00ffff', '#ffa500', '#ffffff'];
+        let seriesData = []; // Array of arrays
+        let seriesRawBuffer = []; 
+        let seriesLastFiltered = [];
+        let seriesLastRaw = [];
+        let isPaused = false;
+        let isLogging = false;
+        let logBuffer = "";
         
         autoYCheck.addEventListener('change', () => {
             minYInput.disabled = autoYCheck.checked;
@@ -251,6 +312,33 @@ function getWebviewContent() {
         });
         showGridCheck.addEventListener('change', draw);
         gridColorInput.addEventListener('input', draw);
+        splitViewCheck.addEventListener('change', draw);
+
+        pauseBtn.addEventListener('click', () => {
+            isPaused = !isPaused;
+            pauseBtn.textContent = isPaused ? 'Resume' : 'Pause';
+            pauseBtn.classList.toggle('paused', isPaused);
+        });
+
+        logBtn.addEventListener('click', () => {
+            if (!isLogging) {
+                isLogging = true;
+                logBuffer = "Timestamp, " + seriesData.map((_, i) => "Channel " + (i+1)).join(", ") + "\\n";
+                logBtn.textContent = "Stop Log";
+                logBtn.style.background = "var(--vscode-debugIcon-stopForeground)";
+            } else {
+                isLogging = false;
+                logBtn.textContent = "Start Log";
+                logBtn.style.background = "var(--vscode-button-background)";
+                if (logBuffer.length > 0) {
+                    vscode.postMessage({
+                        command: 'saveLog',
+                        data: logBuffer
+                    });
+                }
+            }
+        });
+
         filterTypeSelect.addEventListener('change', () => {
             const type = filterTypeSelect.value;
             if (type === 'smooth') {
@@ -266,10 +354,10 @@ function getWebviewContent() {
         [minYInput, maxYInput, pointsXInput].forEach(el => el.addEventListener('input', draw));
 
         captureBtn.addEventListener('click', () => {
-            if (data.length < 2) {
+            if (seriesData.length === 0 || seriesData[0].length < 2) {
                 vscode.postMessage({
                     command: 'showError',
-                    message: 'No data to capture! Please wait for at least 2 points.'
+                    message: 'No data to capture!'
                 });
                 return;
             }
@@ -302,59 +390,95 @@ function getWebviewContent() {
 
         window.addEventListener('message', event => {
             const message = event.data;
-            if (message.type === 'data') {
-                const val = message.value;
-                rawDataBuffer.push(val);
-                if (rawDataBuffer.length > 1000) {
-                    rawDataBuffer.splice(0, rawDataBuffer.length - 1000);
+            if (message.type === 'data' && message.values) {
+                if (isPaused) {
+                    return;
+                }
+                const values = message.values;
+                
+                // Initialize/Expand series if more streams appear
+                if (seriesData.length < values.length) {
+                    for (let i = seriesData.length; i < values.length; i++) {
+                        seriesData[i] = [];
+                        seriesRawBuffer[i] = [];
+                        seriesLastFiltered[i] = 0;
+                        seriesLastRaw[i] = 0;
+                        
+                        const div = document.createElement('div');
+                        div.className = 'value-display';
+                        div.id = 'val-' + i;
+                        div.style.color = COLORS[i % COLORS.length];
+                        valueContainer.appendChild(div);
+                    }
                 }
 
-                let processedVal = val;
                 const type = filterTypeSelect.value;
                 const param = parseFloat(filterParamInput.value) || 0;
-
-                if (type === 'smooth') {
-                    const taps = Math.max(1, Math.floor(param));
-                    if (rawDataBuffer.length >= taps) {
-                        const slice = rawDataBuffer.slice(-taps);
-                        processedVal = slice.reduce((a, b) => a + b, 0) / taps;
-                    }
-                } else if (type === 'lowpass') {
-                    const alpha = Math.min(1, Math.max(0, param));
-                    processedVal = alpha * val + (1 - alpha) * lastFilteredValue;
-                } else if (type === 'highpass') {
-                    const alpha = Math.min(1, Math.max(0, param));
-                    processedVal = alpha * (lastFilteredValue + val - lastRawValue);
-                }
-
-                lastFilteredValue = processedVal;
-                lastRawValue = val;
-                data.push(processedVal);
-                
                 const paddingLeft = 60;
                 const paddingRight = 20;
                 const plotWidth = canvas.width - paddingLeft - paddingRight;
-                const maxPoints = autoXCheck.checked ? Math.floor(plotWidth / 2) : parseInt(pointsXInput.value);
-                
-                if (data.length > maxPoints) {
-                    data.splice(0, data.length - maxPoints);
+                let maxPoints = autoXCheck.checked ? Math.floor(plotWidth / 2) : parseInt(pointsXInput.value);
+                if (maxPoints < 2) {
+                    maxPoints = 2;
+                }
+
+                values.forEach((val, i) => {
+                    if (i >= seriesData.length) {
+                        return; // Should not happen with above init
+                    }
+                    
+                    seriesRawBuffer[i].push(val);
+                    if (seriesRawBuffer[i].length > 1000) {
+                        seriesRawBuffer[i].splice(0, seriesRawBuffer[i].length - 1000);
+                    }
+
+                    let processedVal = val;
+                    if (type === 'smooth') {
+                        const taps = Math.max(1, Math.floor(param));
+                        if (seriesRawBuffer[i].length >= taps) {
+                            const slice = seriesRawBuffer[i].slice(-taps);
+                            processedVal = slice.reduce((a, b) => a + b, 0) / taps;
+                        }
+                    } else if (type === 'lowpass') {
+                        const alpha = Math.min(1, Math.max(0, param));
+                        processedVal = alpha * val + (1 - alpha) * seriesLastFiltered[i];
+                    } else if (type === 'highpass') {
+                        const alpha = Math.min(1, Math.max(0, param));
+                        processedVal = alpha * (seriesLastFiltered[i] + val - seriesLastRaw[i]);
+                    }
+
+                    seriesLastFiltered[i] = processedVal;
+                    seriesLastRaw[i] = val;
+                    seriesData[i].push(processedVal);
+                    
+                    if (seriesData[i].length > maxPoints) {
+                        seriesData[i].splice(0, seriesData[i].length - maxPoints);
+                    }
+                    
+                    const display = document.getElementById('val-' + i);
+                    if (display) {
+                        display.textContent = processedVal.toFixed(2);
+                    }
+                });
+
+                if (isLogging) {
+                    const timestamp = new Date().toISOString();
+                    logBuffer += timestamp + ", " + values.join(", ") + "\\n";
                 }
                 
-                valueDisplay.textContent = processedVal.toFixed(2);
                 draw();
             }
         });
 
         function draw() {
             const padding = { top: 20, right: 20, bottom: 30, left: 60 };
-            const plotWidth = canvas.width - padding.left - padding.right;
-            const plotHeight = canvas.height - padding.top - padding.bottom;
+            const fullPlotWidth = canvas.width - padding.left - padding.right;
+            const fullPlotHeight = canvas.height - padding.top - padding.bottom;
 
             ctx.fillStyle = '#000000';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            if (data.length < 1) {
-                // Draw axes even if no data
+            if (seriesData.length === 0 || seriesData[0].length < 1) {
                 ctx.strokeStyle = '#444';
                 ctx.beginPath();
                 ctx.moveTo(padding.left, padding.top);
@@ -364,89 +488,115 @@ function getWebviewContent() {
                 return;
             }
 
-            // Determine Y range
-            let min, max;
+            const isSplit = splitViewCheck.checked;
+            const numSeries = seriesData.length;
+            const chartHeight = isSplit ? (fullPlotHeight / numSeries) : fullPlotHeight;
+
+            // Global Y range (needed for Combined view)
+            let globalMin = Infinity, globalMax = -Infinity;
             if (autoYCheck.checked) {
-                min = Math.min(...data);
-                max = Math.max(...data);
-                if (max === min) { min -= 5; max += 5; }
-                const yPadding = (max - min) * 0.15;
-                min -= yPadding;
-                max += yPadding;
+                seriesData.forEach(s => s.forEach(v => { if (v < globalMin) globalMin = v; if (v > globalMax) globalMax = v; }));
+                if (globalMax === globalMin) { globalMin -= 5; globalMax += 5; }
+                const yPadding = (globalMax - globalMin) * 0.15;
+                globalMin -= yPadding;
+                globalMax += yPadding;
             } else {
-                min = parseFloat(minYInput.value);
-                max = parseFloat(maxYInput.value);
+                globalMin = parseFloat(minYInput.value);
+                globalMax = parseFloat(maxYInput.value);
             }
-            
-            const range = max - min;
-            const maxPoints = autoXCheck.checked ? Math.floor(plotWidth / 2) : parseInt(pointsXInput.value);
-            
-            // Draw Grid and Axis Labels
-            ctx.font = '10px monospace';
-            ctx.textAlign = 'right';
-            ctx.textBaseline = 'middle';
-            
-            const yTicks = 5;
-            for (let i = 0; i <= yTicks; i++) {
-                const val = min + (range * i / yTicks);
-                const y = canvas.height - padding.bottom - (i / yTicks * plotHeight);
+
+            seriesData.forEach((data, sIdx) => {
+                const chartTop = padding.top + (isSplit ? (sIdx * chartHeight) : 0);
+                const chartBottom = chartTop + chartHeight;
                 
-                // Grid line
-                if (showGridCheck.checked) {
-                    ctx.strokeStyle = gridColorInput.value;
-                    ctx.beginPath();
-                    ctx.moveTo(padding.left, y);
-                    ctx.lineTo(canvas.width - padding.right, y);
-                    ctx.stroke();
+                let min = globalMin;
+                let max = globalMax;
+
+                if (isSplit && autoYCheck.checked) {
+                    min = Math.min(...data);
+                    max = Math.max(...data);
+                    if (max === min) { min -= 5; max += 5; }
+                    const yPadding = (max - min) * 0.15;
+                    min -= yPadding;
+                    max += yPadding;
                 }
                 
-                // Label
-                ctx.fillStyle = '#aaa';
-                ctx.fillText(val.toFixed(2), padding.left - 8, y);
-            }
+                const range = max - min;
+                let maxPoints = autoXCheck.checked ? Math.floor(fullPlotWidth / 2) : parseInt(pointsXInput.value);
+                if (maxPoints < 2) { maxPoints = 2; }
 
-            // X Axis "Time" or "Samples" label (optional)
+                // Grid and Axis Labels (Labels for each in Split, or first in Combined)
+                ctx.font = isSplit ? '8px monospace' : '10px monospace';
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'middle';
+                
+                const yTicks = isSplit ? 3 : 5;
+                for (let i = 0; i <= yTicks; i++) {
+                    const val = min + (range * i / yTicks);
+                    const y = chartBottom - (i / yTicks * chartHeight);
+                    
+                    if (showGridCheck.checked) {
+                        ctx.strokeStyle = gridColorInput.value;
+                        ctx.beginPath();
+                        ctx.moveTo(padding.left, y);
+                        ctx.lineTo(canvas.width - padding.right, y);
+                        ctx.stroke();
+                    }
+                    if (isSplit || sIdx === 0) {
+                        ctx.fillStyle = sIdx === 0 || isSplit ? '#aaa' : COLORS[sIdx % COLORS.length];
+                        ctx.fillText(val.toFixed(2), padding.left - 8, y);
+                    }
+                }
+
+                // Axis Lines
+                ctx.strokeStyle = '#666';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(padding.left, chartTop);
+                ctx.lineTo(padding.left, chartBottom);
+                ctx.lineTo(canvas.width - padding.right, chartBottom);
+                ctx.stroke();
+
+                // Draw Data
+                if (data.length > 0) {
+                    const color = COLORS[sIdx % COLORS.length];
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    
+                    for (let i = 0; i < data.length; i++) {
+                        const x = padding.left + fullPlotWidth - ((data.length - 1 - i) / (maxPoints - 1)) * fullPlotWidth;
+                        const normalized = (data[i] - min) / (range || 1);
+                        const y = chartBottom - (normalized * chartHeight);
+                        
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.stroke();
+
+                    // Fill
+                    if (data.length >= 2 && (sIdx === 0 || isSplit)) {
+                        const firstX = padding.left + fullPlotWidth - ((data.length - 1) / (maxPoints - 1)) * fullPlotWidth;
+                        const lastX = padding.left + fullPlotWidth;
+                        ctx.lineTo(lastX, chartBottom);
+                        ctx.lineTo(firstX, chartBottom);
+                        ctx.closePath();
+                        const gradient = ctx.createLinearGradient(0, chartTop, 0, chartBottom);
+                        const opacity = isSplit ? 0.1 : 0.15;
+                        gradient.addColorStop(0, sIdx === 0 ? 'rgba(0, 255, 0, ' + opacity + ')' : 'rgba(255, 255, 255, 0.05)');
+                        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                        ctx.fillStyle = gradient;
+                        ctx.fill();
+                    }
+                }
+            });
+
+            // X Axis label at the bottom
+            ctx.font = '10px monospace';
+            ctx.fillStyle = '#aaa';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
-            ctx.fillText('Samples (last ' + data.length + ')', padding.left + plotWidth/2, canvas.height - padding.bottom + 10);
-
-            // Draw Axis Lines
-            ctx.strokeStyle = '#666';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(padding.left, padding.top);
-            ctx.lineTo(padding.left, canvas.height - padding.bottom);
-            ctx.lineTo(canvas.width - padding.right, canvas.height - padding.bottom);
-            ctx.stroke();
-
-            // Draw Data Line
-            ctx.strokeStyle = '#00ff00';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            
-            for (let i = 0; i < data.length; i++) {
-                const x = padding.left + (i / (maxPoints - 1)) * plotWidth;
-                const normalized = (data[i] - min) / (range || 1);
-                const y = canvas.height - padding.bottom - (normalized * plotHeight);
-                
-                if (i === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-            }
-            ctx.stroke();
-
-            // Gradient fill
-            if (data.length >= 2) {
-                const lastX = padding.left + ((data.length - 1) / (maxPoints - 1)) * plotWidth;
-                const firstX = padding.left;
-                
-                ctx.lineTo(lastX, canvas.height - padding.bottom);
-                ctx.lineTo(firstX, canvas.height - padding.bottom);
-                const gradient = ctx.createLinearGradient(0, padding.top, 0, canvas.height - padding.bottom);
-                gradient.addColorStop(0, 'rgba(0, 255, 0, 0.2)');
-                gradient.addColorStop(1, 'rgba(0, 255, 0, 0)');
-                ctx.fillStyle = gradient;
-                ctx.fill();
-            }
+            ctx.fillText('Samples (last ' + seriesData[0].length + ')', padding.left + fullPlotWidth/2, canvas.height - padding.bottom + 10);
         }
     </script>
 </body>

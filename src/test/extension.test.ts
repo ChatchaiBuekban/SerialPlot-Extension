@@ -9,7 +9,7 @@ suite('Extension Test Suite', () => {
 	vscode.window.showInformationMessage('Start all tests.');
 
 	test('Command startPlot should be registered', async () => {
-		const extension = vscode.extensions.getExtension('nstda.serialplot-extension');
+		const extension = vscode.extensions.getExtension('chatchaibuekban.serialplot-extension');
 		if (extension) {
 			await extension.activate();
 		}
